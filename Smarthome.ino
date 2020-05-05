@@ -12,6 +12,7 @@
 #define TRANSISTOR_4_PIN 33 // OK
 
 #define THERMOMETER_0_PIN 16 // OK
+#define ONE_WIRE_BUS THERMOMETER_0_PIN
 
 #define UART_TX 1 // TX!
 #define UART_RX 3 // RX!
@@ -26,7 +27,7 @@ const int PWM_RESOLUTION = 10; //bits
 
 /* V10-20 Relays
  * V20-30 Transistors
- * 
+ * V0 - temperature
  */
 
 #define BLYNK_PRINT Serial
@@ -35,10 +36,19 @@ const int PWM_RESOLUTION = 10; //bits
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <BlynkSimpleEsp32.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
-char auth[] = "authtoken";W
+
+
+char auth[] = "authtoken";
 char ssid[] = WiFi_SSID;
 char pass[] = WiFi_password;
+
+
+OneWire oneWire(ONE_WIRE_BUS); 
+DallasTemperature sensors(&oneWire);
+
 
 
 BLYNK_CONNECTED() {
@@ -73,7 +83,6 @@ BLYNK_WRITE(V15){
 BLYNK_WRITE(V20){
     int pinValue = param.asInt();
     ledcWrite(0, pinValue);
-    Serial.println(pinValue);
 }
 BLYNK_WRITE(V21){
     int pinValue = param.asInt();
@@ -94,9 +103,26 @@ BLYNK_WRITE(V24){
 
 BlynkTimer timer;
 
-void sendSensor()
+void requestSensor()
 {
+   sensors.requestTemperatures();
 }
+
+void recieveSensor()
+{
+   float temp = sensors.getTempCByIndex(0);
+   if (isnan(temp)){
+      Serial.println("błąd komunikacji");}
+   else if (temp == 127){
+       Serial.println("Problem z podłączeniem sensora");
+   }
+   else if ((temp>127)||(temp<-55)){
+       Serial.println("problem z odczytem");
+   }else{
+    Blynk.virtualWrite(V0,temp);
+   }
+}
+
 
 void setup()
 {
@@ -112,12 +138,14 @@ void setup()
   ledcAttachPin(TRANSISTOR_2_PIN, 2);
   ledcAttachPin(TRANSISTOR_3_PIN, 3);
   ledcAttachPin(TRANSISTOR_4_PIN, 4);
-  
+  sensors.begin(); 
   Blynk.begin(auth, ssid, pass);
   // You can also specify server:
   //Blynk.begin(auth, ssid, pass, "blynk-cloud.com", 80);
   //Blynk.begin(auth, ssid, pass, IPAddress(192,168,1,100), 8080);
-  timer.setInterval(1000L, sendSensor);
+  timer.setInterval(15000L, requestSensor);
+  delay(300);
+  timer.setInterval(15000L, recieveSensor);
 }
 
 void loop()
